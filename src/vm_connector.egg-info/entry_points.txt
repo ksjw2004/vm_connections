@@ -1,0 +1,2 @@
+[console_scripts]
+vm-connector = vm_connector.cli:main

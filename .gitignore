@@ -1,0 +1,17 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Project configuration
+config.yaml
+
+# OS metadata
+.DS_Store
+Thumbs.db

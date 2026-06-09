@@ -1,0 +1,150 @@
+Metadata-Version: 2.4
+Name: vm-connector
+Version: 0.1.0
+Summary: A professional command-line tool for VMware VM management and interactive SSH sessions
+License: MIT
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: paramiko>=3.4.0
+Requires-Dist: pyyaml>=6.0.1
+Requires-Dist: pyvmomi>=8.0.2.0.1
+
+# VMware 虛擬機管理與 SSH 互動式終端機控制工具 (vm-connector)
+
+本專案是一個遵循標準 Python 封裝格式（src-layout）的命令列工具（CLI）。它可讓您從本機電腦便捷地管理本機 (VMware Fusion / Workstation) 或遠端 (ESXi / vCenter) 的虛擬機生命週期，並可直接透過 SSH 建立全功能的互動式終端機（支援 Tab 鍵自動補齊、Ctrl+C、Vim/Nano 編輯器等功能）。
+
+重構後，專案支援使用高效率的 **`uv`** 工具建置虛擬環境，使您可以在任何目錄直接透過單一系統指令 `vm-connector` 來控制虛擬機。
+
+---
+
+## 專案結構
+
+```
+vm_connection/
+├── .gitignore             # 忽略快取、虛擬環境與個人設定檔
+├── README.md              # 本說明文件
+├── pyproject.toml         # 專案套件打包與 CLI 命令宣告
+├── requirements.txt       # 相依套件清單
+├── config.yaml.example    # 設定檔範本
+├── config.yaml            # 實際運作設定檔 (個人設定，不納入 Git)
+├── setup_env.sh           # 自動建置虛擬環境與安裝腳本 (uv 版)
+└── src/
+    └── vm_connector/      # 專案核心套件
+        ├── __init__.py    # 套件宣告
+        ├── __main__.py    # 執行進入點 (支援 python -m vm_connector)
+        ├── cli.py         # CLI 參數解析與命令分配
+        ├── vm_manager.py  # 虛擬機電源管理邏輯
+        └── ssh_client.py  # SSH 連線與互動式終端機邏輯
+```
+
+---
+
+## 安裝與設定說明
+
+### 1. 一鍵建置虛擬環境 (使用 uv)
+
+本專案提供 `setup_env.sh` 腳本，可自動偵測/安裝高效率的 Rust Python 管理工具 `uv`，並利用它建立 `.venv` 虛擬環境與安裝此 CLI 套件：
+
+```bash
+# 給予腳本執行權限並執行
+chmod +x setup_env.sh
+./setup_env.sh
+```
+
+### 2. 啟用虛擬環境
+
+安裝完成後，在您要開始使用工具的任何 Terminal 視窗中，請先執行以下指令以啟用虛擬環境：
+
+```bash
+source .venv/bin/activate
+```
+*(啟用後，終端機提示字元前方會出現 `(.venv)` 標記)*
+
+### 3. 建立並填寫設定檔
+
+在您的工作目錄下執行以下指令以產生 `config.yaml` 個人設定檔：
+
+```bash
+vm-connector init
+```
+
+這會在目前目錄下產生一個 `config.yaml` 檔案。請使用文字編輯器開啟並填寫您的設定：
+- **本機虛擬機 (VMware Fusion/Workstation)**：將 `vmware_type` 設為 `fusion` (macOS) 或 `workstation`。並填寫 `.vmx` 的絕對路徑。
+- **遠端伺服器 (ESXi/vCenter)**：將 `vmware_type` 設為 `esxi`。並填寫 `esxi_vm` 連線資訊。
+- **純 SSH 連線**：將 `vmware_type` 設為 `none`。
+- **SSH 帳密設定**：填寫 `ssh.username`、`ssh.password` 或 `ssh.key_path` (私鑰檔案路徑，如 `~/.ssh/id_rsa`)。
+
+---
+
+## 命令使用說明
+
+啟用虛擬環境後，您可以在任意目錄直接呼叫 `vm-connector` 命令：
+
+### 1. 檢查虛擬機狀態
+```bash
+vm-connector vm-status
+```
+
+### 2. 將虛擬機開機
+```bash
+vm-connector vm-start
+```
+
+### 3. 將虛擬機關機
+- 預設安全關機（需安裝 VMware Tools）：
+  ```bash
+  vm-connector vm-stop
+  ```
+- 強制斷電關機：
+  ```bash
+  vm-connector vm-stop --force
+  ```
+
+### 4. 獲取虛擬機 IP 地址
+```bash
+vm-connector vm-ip
+```
+
+### 5. 在虛擬機中執行單一命令
+```bash
+vm-connector run "ls -la"
+```
+
+### 6. 連線到互動式 SSH 終端機
+```bash
+vm-connector ssh
+```
+> 進入後可正常使用 `Tab` 自動補齊、`Ctrl+C` 中斷指令、`Vim` 編輯器、`top` 系統監控等互動功能。要結束連線，請輸入 `exit` 或按 `Ctrl+D`。
+
+---
+
+## 如何上傳至 GitHub
+
+專案中已經配置了精細的 `.gitignore`，會自動忽略您的虛擬環境（`.venv`）以及包含敏感密碼的個人設定檔（`config.yaml`）。您可以放心地執行以下步驟將本專案推送到 GitHub：
+
+### 1. 初始化 Git 儲存庫
+在根目錄 `/Users/jesse/vm_connection` 下執行：
+```bash
+git init
+```
+
+### 2. 將專案檔案加入暫存區並提交
+```bash
+git add .
+git commit -m "Initial commit: VMware VM management & SSH terminal CLI tool"
+```
+
+### 3. 設定 GitHub 遠端儲存庫並推送
+請先在 GitHub 網站上建立一個新的空白儲存庫（Repository），複製它的網址（例如 `https://github.com/您的帳號/儲存庫名稱.git`），然後在終端機執行：
+
+```bash
+# 連結至您的 GitHub 儲存庫
+git remote add origin <您的_GitHub_儲存庫_網址>
+
+# 將主分支名稱命名為 main
+git branch -M main
+
+# 推送檔案至 GitHub
+git push -u origin main
+```
+這將會把專案推送到您的 GitHub！未來其他開發者下載您的專案後，只需複製 `config.yaml.example` 命名為 `config.yaml` 並自行設定即可使用。

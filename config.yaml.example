@@ -1,0 +1,41 @@
+# VMware & SSH 控制工具設定檔範本 (config.yaml)
+
+# 虛擬機驅動設定 (可用值: fusion, workstation, esxi, none)
+# - fusion: 使用 macOS 的 vmrun 控制本機 VMware Fusion
+# - workstation: 使用 Windows/Linux 的 vmrun 控制本機 VMware Workstation
+# - esxi: 使用 pyVmomi 透過網路 API 控制遠端 ESXi / vCenter 伺服器
+# - none: 僅使用 SSH 連線，跳過開關機控制
+vmware_type: fusion
+
+# VMware Fusion/Workstation 本機設定 (當 vmware_type 為 fusion 或 workstation 時使用)
+local_vm:
+  # 虛擬機設定檔 (.vmx) 的絕對路徑
+  vmx_path: "/Users/yourusername/Virtual Machines.localized/Ubuntu.vmwarevm/Ubuntu.vmx"
+  # vmrun 執行檔的路徑。若留空，程式會嘗試自動尋找預設路徑：
+  # - macOS Fusion: /Applications/VMware Fusion.app/Contents/Library/vmrun
+  # - Windows Workstation: C:\\Program Files (x86)\\VMware\\VMware Workstation\\vmrun.exe
+  # - Linux Workstation: /usr/bin/vmrun
+  vmrun_path: ""
+
+# VMware ESXi / vCenter 遠端設定 (當 vmware_type 為 esxi 時使用)
+esxi_vm:
+  host: "192.168.1.100"
+  port: 443
+  username: "root"
+  password: "your_esxi_password"
+  # 虛擬機在 ESXi/vCenter 中的顯示名稱 (VM Name)
+  vm_name: "My_Ubuntu_VM"
+
+# 虛擬機 Guest OS 的 SSH 連線設定
+ssh:
+  # 虛擬機的 IP 位址。
+  # 提示: 如果 vmware_type 不是 none，程式在執行時若發現 host 未填寫，
+  # 會自動嘗試向 VMware 獲取虛擬機的 Guest IP。
+  host: "192.168.x.x"
+  port: 22
+  username: "ubuntu"
+  
+  # 驗證方式 (擇一填寫，若設定 key_path 則優先使用金鑰驗證)
+  password: "your_ssh_password"
+  key_path: ""            # 金鑰檔案路徑 (例如 "/Users/yourusername/.ssh/id_rsa")
+  key_password: ""        # 若金鑰有密碼保護，請填寫此欄位，否則留空
