@@ -44,6 +44,17 @@ ssh:
   password: "your_ssh_password"
   key_path: ""            # 金鑰檔案路徑 (例如 "/Users/yourusername/.ssh/id_rsa")
   key_password: ""        # 若金鑰有密碼保護，請填寫此欄位，否則留空
+
+# Socket 連線設定 (本機作為 Client 連線到 VM 內部的 Socket Server)
+socket:
+  # Socket Server 的 IP 位址。留空時自動取用 ssh.host 的值。
+  host: ""
+  # Socket Server 監聽的 Port
+  port: 9999
+  # 連線逾時秒數 (預設 10)
+  timeout: 10
+  # 文字資料的編碼格式 (預設 utf-8)
+  encoding: "utf-8"
 """
 
 
@@ -127,6 +138,87 @@ def get_ssh_client(config, vm_manager):
     return client
 
 
+def get_socket_host(config: dict) -> str:
+    """取得 Socket Server 的 IP：優先用 socket.host，若未填則取用 ssh.host"""
+    socket_cfg = config.get("socket", {})
+    host = socket_cfg.get("host", "").strip()
+    if not host:
+        ssh_host = config.get("ssh", {}).get("host", "").strip()
+        if ssh_host and ssh_host != "192.168.x.x":
+            return ssh_host
+        print(
+            "[錯誤] 未設定 Socket Server IP。請在 config.yaml 填寫 socket.host 或 ssh.host。",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return host
+
+
+def handle_socket_send(args, config):
+    """處理 socket-send 子指令邏輯"""
+    socket_cfg = config.get("socket", {})
+    host = args.host or get_socket_host(config)
+    port = args.port or socket_cfg.get("port", 9999)
+    timeout = socket_cfg.get("timeout", 10)
+    encoding = socket_cfg.get("encoding", "utf-8")
+
+    from .socket_client import SocketClient
+
+    # 確認只指定了一種資料來源
+    sources = [s for s in [args.text, args.json, args.file] if s is not None]
+    if len(sources) == 0:
+        print("[錯誤] 請至少指定一種傳送方式：--text、--json 或 --file。", file=sys.stderr)
+        sys.exit(1)
+    if len(sources) > 1:
+        print("[錯誤] 請只選擇一種傳送方式：--text、--json 或 --file（不可同時使用）。", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        with SocketClient(host, port, timeout=timeout, encoding=encoding) as client:
+            if args.text is not None:
+                client.send_text(args.text)
+            elif args.json is not None:
+                import json
+                try:
+                    data = json.loads(args.json)
+                except json.JSONDecodeError as e:
+                    print(f"[錯誤] JSON 格式錯誤: {e}", file=sys.stderr)
+                    sys.exit(1)
+                client.send_json(data)
+            elif args.file is not None:
+                if not os.path.exists(args.file):
+                    print(f"[錯誤] 找不到檔案: {args.file}", file=sys.stderr)
+                    sys.exit(1)
+                with open(args.file, "rb") as f:
+                    data = f.read()
+                client.send_bytes(data)
+
+            # 若啟用接收回應
+            if args.receive:
+                response = client.receive_text()
+                if response:
+                    print(f"[回應] {response}")
+    except Exception as e:
+        print(f"[錯誤] Socket 操作失敗: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def handle_bg_run(args, config, vm_manager):
+    """處理 bg-run 子指令邏輯"""
+    client = get_ssh_client(config, vm_manager)
+    try:
+        use_nohup = not args.no_nohup
+        pid = client.execute_background(args.cmd, use_nohup=use_nohup)
+        if pid:
+            print(f"[成功] 背景行程 PID: {pid}")
+        sys.exit(0)
+    except Exception as e:
+        print(f"[錯誤] 背景執行失敗: {e}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        client.close()
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="VMware 虛擬機管理與 SSH 互動式終端機控制工具 CLI",
@@ -157,6 +249,30 @@ def main():
     
     # 7. ssh
     subparsers.add_parser("ssh", help="與虛擬機建立互動式 SSH 終端機連線 (支援 Tab、Ctrl+C)")
+
+    # 8. socket-send
+    socket_parser = subparsers.add_parser(
+        "socket-send",
+        help="連線到 VM 內部的 Socket Server 並傳送資料"
+    )
+    socket_send_group = socket_parser.add_mutually_exclusive_group(required=True)
+    socket_send_group.add_argument("--text", metavar="MESSAGE", help="傳送文字訊息")
+    socket_send_group.add_argument("--json", metavar="JSON", help="傳送 JSON 字串 (例如 '{\"action\": \"start\"}')")
+    socket_send_group.add_argument("--file", metavar="FILE", help="讀取本機檔案並以二進位方式傳送")
+    socket_parser.add_argument("--host", metavar="HOST", default=None, help="覆寫 config 中的 socket.host")
+    socket_parser.add_argument("--port", metavar="PORT", type=int, default=None, help="覆寫 config 中的 socket.port")
+    socket_parser.add_argument("--receive", action="store_true", help="傳送後等待並顯示 Server 的回應")
+
+    # 9. bg-run
+    bg_parser = subparsers.add_parser(
+        "bg-run",
+        help="透過 SSH 在 VM 背景執行指令（nohup 包裝，立即返回 PID）"
+    )
+    bg_parser.add_argument("cmd", help="要在 VM 中背景執行的指令，例如 '/opt/myapp/start.sh'")
+    bg_parser.add_argument(
+        "--no-nohup", action="store_true",
+        help="不使用 nohup 包裝（適用於本身有 daemon 機制的程式）"
+    )
 
     args = parser.parse_args()
 
@@ -218,6 +334,12 @@ def main():
             client.interactive_shell()
         finally:
             client.close()
+
+    elif args.command == "socket-send":
+        handle_socket_send(args, config)
+
+    elif args.command == "bg-run":
+        handle_bg_run(args, config, vm_manager)
 
 
 if __name__ == "__main__":

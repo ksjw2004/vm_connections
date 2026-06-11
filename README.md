@@ -23,7 +23,8 @@ vm_connection/
         ├── __main__.py    # 執行進入點 (支援 python -m vm_connector)
         ├── cli.py         # CLI 參數解析與命令分配
         ├── vm_manager.py  # 虛擬機電源管理邏輯
-        └── ssh_client.py  # SSH 連線與互動式終端機邏輯
+        ├── ssh_client.py  # SSH 連線與互動式終端機邏輯
+        └── socket_client.py  # TCP Socket Client 邏輯 (傳送資料到 VM)
 ```
 
 ---
@@ -62,6 +63,7 @@ vm-connector init
 - **遠端伺服器 (ESXi/vCenter)**：將 `vmware_type` 設為 `esxi`。並填寫 `esxi_vm` 連線資訊。
 - **純 SSH 連線**：將 `vmware_type` 設為 `none`。
 - **SSH 帳密設定**：填寫 `ssh.username`、`ssh.password` 或 `ssh.key_path` (私鑰檔案路徑，如 `~/.ssh/id_rsa`)。
+- **Socket 連線設定**：若要使用 `socket-send` 功能，請填寫 `socket.port`（VM 內 Server 的監聽 Port）。`socket.host` 若留空，會自動取用 `ssh.host` 的值。
 
 ---
 
@@ -105,7 +107,50 @@ vm-connector ssh
 ```
 > 進入後可正常使用 `Tab` 自動補齊、`Ctrl+C` 中斷指令、`Vim` 編輯器、`top` 系統監控等互動功能。要結束連線，請輸入 `exit` 或按 `Ctrl+D`。
 
----
+### 7. 透過 Socket 傳送資料到 VM
+
+本機作為 **TCP Client**，連線到 VM 內部執行的 Socket Server，傳送各種格式的資料。
+
+> **前提**：VM 內部需有 Socket Server 程式正在執行並監聽指定 Port。
+
+- 傳送文字訊息：
+  ```bash
+  vm-connector socket-send --text "hello vm"
+  ```
+- 傳送 JSON 資料：
+  ```bash
+  vm-connector socket-send --json '{"action": "start", "target": "sensor"}'
+  ```
+- 傳送本機檔案（二進位）：
+  ```bash
+  vm-connector socket-send --file /path/to/data.bin
+  ```
+- 傳送後等待 Server 回傳回應：
+  ```bash
+  vm-connector socket-send --text "ping" --receive
+  ```
+- 覆寫 config 中的連線設定：
+  ```bash
+  vm-connector socket-send --text "test" --host 192.168.1.50 --port 8888
+  ```
+
+### 8. 在 VM 背景執行程式
+
+透過 SSH 在 VM 內啟動一支程式，並讓它在 **背景** 繼續運作（SSH 斷線後程式仍持續執行），指令立即返回並顯示 PID。
+
+- 背景執行腳本（使用 nohup 包裝）：
+  ```bash
+  vm-connector bg-run "/opt/myapp/start.sh"
+  ```
+- 背景執行 Python 程式：
+  ```bash
+  vm-connector bg-run "python3 /home/ubuntu/server.py"
+  ```
+- 程式本身有 daemon 機制（不使用 nohup）：
+  ```bash
+  vm-connector bg-run "/usr/bin/mydaemon --start" --no-nohup
+  ```
+> **提示**：`bg-run` 使用 `nohup <cmd> > /dev/null 2>&1 &` 包裝，確保程式在 SSH 斷線後仍繼續執行，並回傳行程的 PID。
 
 ## 如何上傳至 GitHub
 

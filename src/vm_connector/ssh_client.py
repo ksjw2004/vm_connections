@@ -105,6 +105,51 @@ class SSHClientWrapper:
         exit_code = chan.recv_exit_status()
         return exit_code
 
+    def execute_background(self, command: str, use_nohup: bool = True) -> str | None:
+        """
+        透過 SSH 在 VM 背景執行指令，立即返回控制權（不等待指令結束）。
+
+        使用 nohup 包裝指令，並將 stdout/stderr 重導向至 /dev/null，
+        確保指令在 SSH 連線斷開後仍繼續運作。
+
+        Args:
+            command:    要在 VM 中執行的指令字串
+            use_nohup:  是否使用 nohup 包裝（預設 True）；
+                        若程式本身已有 daemon 機制可設為 False。
+
+        Returns:
+            背景行程的 PID 字串；若無法取得則回傳 None。
+        """
+        if not self.client:
+            raise RuntimeError("SSH Client 未連線。請先呼叫 connect()")
+
+        if use_nohup:
+            # 使用 nohup 讓程式在背景執行，並取回 PID
+            bg_command = f"nohup {command} > /dev/null 2>&1 & echo $!"
+        else:
+            bg_command = f"{command} & echo $!"
+
+        print(f"[資訊] 在 VM 背景執行: {command}")
+
+        try:
+            _, stdout, stderr = self.client.exec_command(bg_command, timeout=15)
+            pid = stdout.read().decode("utf-8", errors="replace").strip()
+            err = stderr.read().decode("utf-8", errors="replace").strip()
+
+            if err:
+                print(f"[警告] 背景執行 stderr: {err}", file=sys.stderr)
+
+            if pid and pid.isdigit():
+                print(f"[成功] 程式已在背景啟動，PID: {pid}")
+                return pid
+            else:
+                # 即使 PID 格式不符預期，指令可能仍有啟動
+                print(f"[資訊] 背景指令已送出（未能取得 PID，回傳值: {pid!r}）。")
+                return pid if pid else None
+        except Exception as e:
+            print(f"[錯誤] 背景執行失敗: {e}", file=sys.stderr)
+            raise
+
     def interactive_shell(self):
         """開啟與遠端虛擬機的互動式 TTY 終端機"""
         if not self.client:

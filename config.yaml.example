@@ -39,3 +39,15 @@ ssh:
   password: "your_ssh_password"
   key_path: ""            # 金鑰檔案路徑 (例如 "/Users/yourusername/.ssh/id_rsa")
   key_password: ""        # 若金鑰有密碼保護，請填寫此欄位，否則留空
+
+# Socket 連線設定 (本機作為 Client 連線到 VM 內部執行的 Socket Server)
+socket:
+  # Socket Server 的 IP 位址。
+  # 若留空，程式會自動取用 ssh.host 的值。
+  host: ""
+  # Socket Server 在 VM 內監聽的 Port
+  port: 9999
+  # 連線逾時秒數 (預設 10 秒)
+  timeout: 10
+  # 文字資料的編碼格式 (預設 utf-8)
+  encoding: "utf-8"
